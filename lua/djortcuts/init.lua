@@ -17,7 +17,7 @@ local default_config = {
 	-- Terminal command to run Django commands
 	terminal_cmd = "split",
 	-- Configuration file name
-	config_file = ".django-automation.json",
+	config_file = ".djortcuts.json",
 	-- Auto-detect Django project
 	auto_detect = true,
 }
@@ -117,7 +117,7 @@ local function save_config()
 	if file then
 		file:write(vim.fn.json_encode(config_data))
 		file:close()
-		print("Django automation config saved to " .. config_path)
+		print("Djortcuts config saved to " .. config_path)
 	else
 		print("Error: Could not save config to " .. config_path)
 	end
@@ -228,7 +228,7 @@ function M.DjangoInit()
 
 	save_config()
 
-	print("Django automation initialized!")
+	print("Djortcuts initialized!")
 	print("Django root: " .. django_root)
 	print("Project root: " .. config.project_root)
 	print("Django settings: " .. config.django_settings)
@@ -314,7 +314,7 @@ function M.setup(user_config)
 	vim.api.nvim_create_user_command("DjangoMigrate", M.DjangoMigrate, { desc = "Run Django migrations" })
 	vim.api.nvim_create_user_command("DjangoMakemigrations", M.DjangoMakemigrations, { desc = "Create migrations" })
 	vim.api.nvim_create_user_command("DjangoShell", M.DjangoShell, { desc = "Open Django shell" })
-	vim.api.nvim_create_user_command("DjangoInit", M.DjangoInit, { desc = "Initialize Django automation config" })
+	vim.api.nvim_create_user_command("DjangoInit", M.DjangoInit, { desc = "Initialize Djortcuts config" })
 	vim.api.nvim_create_user_command("DjangoTest", M.DjangoTest, { desc = "Run Django tests with test settings" })
 	vim.api.nvim_create_user_command("DjangoCollectstatic", M.DjangoCollectstatic, { desc = "Collect static files" })
 	vim.api.nvim_create_user_command(
