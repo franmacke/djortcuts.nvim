@@ -1,17 +1,18 @@
-# Django Automation for Neovim
+# Djortcuts for Neovim
 
 A Neovim plugin that automates common Django development tasks.
 
 ## Installation
 
 Using lazy.nvim:
+
 ```lua
--- ~/.config/nvim/lua/plugins/django-automation.lua
+-- ~/.config/nvim/lua/plugins/djortcuts.lua
 
 {
-  "franmacke/django-automation.nvim",
+  "franmacke/djortcuts.nvim",
   config = function()
-    require("django_automation").setup()
+    require("djortcuts").setup()
   end,
   keys = {
     { "<leader>dr", "<cmd>DjangoRun<cr>", desc = "Django Run Server" },
@@ -27,18 +28,16 @@ Using lazy.nvim:
 2. Run `:DjangoInit` to initialize the plugin
 3. Use the commands or keybindings to run Django tasks
 
-
 ## Current Config
 
 ```lua
 return {
   {
-    "franmacke/django-automation.nvim",
-    name = "django-automation",
+    "franmacke/djortcuts.nvim",
     lazy = false,
     priority = 1000,
     config = function()
-      local django_automation = require("django-automation")
+      local django_automation = require("djortcuts")
       django_automation.setup()
     end,
     keys = {
@@ -55,7 +54,7 @@ return {
       "folke/which-key.nvim",
       opts = {
         spec = {
-          { "<leader>j", group = "Django" },
+          { "<leader>j", group = "djortcuts", icon = { icon = "⚡" } },
           { "<leader>jm", group = "Migrations" },
         },
       },
