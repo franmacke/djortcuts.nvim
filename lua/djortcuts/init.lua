@@ -1,3 +1,9 @@
+local pickers = require("telescope.pickers")
+local finders = require("telescope.finders")
+local conf = require("telescope.config").values
+local actions = require("telescope.actions")
+local action_state = require("telescope.actions.state")
+
 local M = {}
 
 -- Default configuration
@@ -175,6 +181,59 @@ local function run_django_terminal(command, opts)
 	vim.cmd("stopinsert")
 end
 
+local function get_all_management_commands()
+	local results = {}
+
+	local function scan_dir(dir, prefix)
+		local fd = vim.loop.fs_scandir(dir)
+		if not fd then
+			return
+		end
+
+		while true do
+			local name, file_type = vim.loop.fs_scandir_next(fd)
+			if not name then
+				break
+			end
+
+			if file_type == "directory" then
+				scan_dir(dir .. "/" .. name, prefix)
+			elseif file_type == "file" and name:match("%.py$") and name ~= "__init__.py" then
+				local command_name = prefix .. name:gsub("%.py$", "")
+				table.insert(results, command_name)
+			end
+		end
+	end
+
+	local project_root = config.django_root or config.project_root
+	if not project_root then
+		return results
+	end
+
+	local fd = vim.loop.fs_scandir(project_root)
+	if not fd then
+		return results
+	end
+
+	while true do
+		local app_name, app_type = vim.loop.fs_scandir_next(fd)
+		if not app_name then
+			break
+		end
+
+		if app_type == "directory" then
+			local commands_path = project_root .. "/" .. app_name .. "/management/commands"
+			local stat = vim.loop.fs_stat(commands_path)
+			if stat and stat.type == "directory" then
+				scan_dir(commands_path, app_name .. ".")
+			else
+			end
+		end
+	end
+
+	return results
+end
+
 -- Public API functions
 function M.DjangoRun()
 	run_django_terminal("runserver")
@@ -290,6 +349,49 @@ function M.DjangoStartproject()
 	end
 end
 
+function M.DjangoManagementCommand()
+	local available_commands = get_all_management_commands()
+	if not available_commands or #available_commands == 0 then
+		print("Error: No se encontraron management commands")
+		return
+	end
+
+	vim.ui.select(available_commands, { prompt = "Seleccioná un management command:" }, function(choice)
+		if not choice then
+			return
+		end
+
+		-- Quitar prefijo de app si existe
+		if choice:match("%.") then
+			local parts = vim.split(choice, "%.")
+			choice = parts[#parts]
+		end
+
+		-- Telescope picker en el centro para argumentos
+		pickers
+			.new({}, {
+				prompt_title = "Args (Enter para vacío)",
+				finder = finders.new_table({ results = { "" } }),
+				sorter = conf.generic_sorter({}),
+				layout_strategy = "center",
+				layout_config = { width = 0.5, height = 3 },
+				attach_mappings = function(prompt_bufnr)
+					actions.select_default:replace(function()
+						local args = action_state.get_current_line()
+						actions.close(prompt_bufnr)
+						local cmd = choice
+						if args ~= "" then
+							cmd = cmd .. " " .. args
+						end
+						run_django_terminal(cmd)
+					end)
+					return true
+				end,
+			})
+			:find()
+	end)
+end
+
 -- Setup function
 function M.setup(user_config)
 	config = vim.tbl_deep_extend("force", default_config, user_config or {})
@@ -338,6 +440,11 @@ function M.setup(user_config)
 	)
 	vim.api.nvim_create_user_command("DjangoStartapp", M.DjangoStartapp, { desc = "Create Django app" })
 	vim.api.nvim_create_user_command("DjangoStartproject", M.DjangoStartproject, { desc = "Create Django project" })
+	vim.api.nvim_create_user_command(
+		"DjangoManagementCommand",
+		M.DjangoManagementCommand,
+		{ desc = "Run Management Command" }
+	)
 end
 
 return M
