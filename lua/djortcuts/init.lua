@@ -1,297 +1,69 @@
-local pickers = require("telescope.pickers")
-local finders = require("telescope.finders")
-local conf = require("telescope.config").values
-local actions = require("telescope.actions")
-local action_state = require("telescope.actions.state")
+local config = require("djortcuts.config")
+local utils = require("djortcuts.utils")
+local commands = require("djortcuts.commands")
+local management = require("djortcuts.management")
+local pickers = require("djortcuts.pickers")
 
 local M = {}
 
--- Default configuration
-local default_config = {
-	-- Django root (directory containing manage.py)
-	django_root = nil,
-	-- Project root (parent directory where you stand)
-	project_root = nil,
-	-- Default virtual environment path (will be auto-detected if not set)
-	venv_path = nil,
-	-- Default Python executable (will use venv python if available)
-	python_executable = "python",
-	-- Django settings for normal commands
-	django_settings = nil,
-	-- Django settings for tests
-	django_test_settings = nil,
-	-- Terminal command to run Django commands
-	terminal_cmd = "split",
-	-- Configuration file name
-	config_file = ".djortcuts.json",
-	-- Auto-detect Django project
-	auto_detect = true,
-}
-
--- Configuration
-local config = {}
-
--- Utility functions
-local function find_django_root()
-	local current_dir = vim.fn.getcwd()
-	print("Current directory: " .. current_dir)
-
-	local subdirs = vim.fn.glob(current_dir .. "/*/", false, true)
-	for _, subdir in ipairs(subdirs) do
-		subdir = subdir:gsub("/$", "")
-		local subdir_manage_py = subdir .. "/manage.py"
-		if vim.fn.filereadable(subdir_manage_py) == 1 then
-			print("Found Django project in: " .. subdir)
-			return subdir
-		end
-	end
-
-	print("No Django project found in subdirectories")
-	return nil
-end
-
-local function find_venv()
-	local current_dir = vim.fn.getcwd()
-	local dir = current_dir
-
-	while dir ~= "/" and dir ~= "" do
-		local venv_dirs = { "venv", ".venv", "env", ".env", "virtualenv" }
-		for _, venv_dir in ipairs(venv_dirs) do
-			local venv_path = dir .. "/" .. venv_dir
-			local bin_path = venv_path .. "/bin/python"
-			local scripts_path = venv_path .. "/Scripts/python.exe"
-
-			if vim.fn.filereadable(bin_path) == 1 or vim.fn.filereadable(scripts_path) == 1 then
-				return venv_path
-			end
-		end
-		dir = vim.fn.fnamemodify(dir, ":h")
-	end
-
-	return nil
-end
-
-local function get_python_executable()
-	if config.venv_path then
-		local bin_python = config.venv_path .. "/bin/python"
-		local scripts_python = config.venv_path .. "/Scripts/python.exe"
-
-		if vim.fn.filereadable(bin_python) == 1 then
-			return bin_python
-		elseif vim.fn.filereadable(scripts_python) == 1 then
-			return scripts_python
-		end
-	end
-
-	return config.python_executable
-end
-
-local function load_config()
-	local config_path = vim.fn.getcwd() .. "/" .. default_config.config_file
-
-	if vim.fn.filereadable(config_path) == 1 then
-		local file = io.open(config_path, "r")
-		if file then
-			local content = file:read("*all")
-			file:close()
-
-			local success, json_config = pcall(vim.fn.json_decode, content)
-			if success and json_config then
-				config.django_root = json_config.django_root or config.django_root
-				config.project_root = json_config.project_root or config.project_root
-				config.venv_path = json_config.venv_path or config.venv_path
-				config.python_executable = json_config.python_executable or config.python_executable
-				config.django_settings = json_config.django_settings or config.django_settings
-				config.django_test_settings = json_config.django_test_settings or config.django_test_settings
-			end
-		end
-	end
-end
-
-local function save_config()
-	local config_path = vim.fn.getcwd() .. "/" .. default_config.config_file
-	local config_data = {
-		django_root = config.django_root,
-		project_root = config.project_root,
-		venv_path = config.venv_path,
-		python_executable = config.python_executable,
-		django_settings = config.django_settings,
-		django_test_settings = config.django_test_settings,
-	}
-
-	local file = io.open(config_path, "w")
-	if file then
-		file:write(vim.fn.json_encode(config_data))
-		file:close()
-		print("Djortcuts config saved to " .. config_path)
-	else
-		print("Error: Could not save config to " .. config_path)
-	end
-end
-
--- Función genérica para ejecutar comandos de Django
-local function run_django_terminal(command, opts)
-	opts = opts or {}
-	local django_root = config.django_root or find_django_root()
-
-	if not django_root then
-		print(
-			"Error: Django project not found. Please run :DjangoInit first or navigate to a Django project directory."
-		)
-		return
-	end
-
-	local python_exec = get_python_executable()
-	local manage_py = django_root .. "/manage.py"
-
-	if vim.fn.filereadable(manage_py) ~= 1 then
-		print("Error: manage.py not found in " .. django_root)
-		return
-	end
-
-	-- Usar settings normales o de test según `opts`
-	local settings_module = opts.test and config.django_test_settings or config.django_settings
-	local settings_arg = settings_module and (" --settings=" .. settings_module) or ""
-
-	-- Build the full command
-	local full_command
-	if config.venv_path then
-		local venv_activate = config.venv_path .. "/bin/activate"
-		if vim.fn.filereadable(venv_activate) == 1 then
-			full_command = "cd "
-				.. django_root
-				.. " && source "
-				.. venv_activate
-				.. " && "
-				.. python_exec
-				.. " manage.py "
-				.. command
-				.. settings_arg
-		else
-			full_command = "cd " .. django_root .. " && " .. python_exec .. " manage.py " .. command .. settings_arg
-		end
-	else
-		full_command = "cd " .. django_root .. " && " .. python_exec .. " manage.py " .. command .. settings_arg
-	end
-
-	print("Running command: " .. full_command)
-
-	vim.cmd(config.terminal_cmd)
-	vim.cmd("terminal " .. full_command)
-	vim.cmd("stopinsert")
-end
-
-local function get_all_management_commands()
-	local results = {}
-
-	local function scan_dir(dir, prefix)
-		local fd = vim.loop.fs_scandir(dir)
-		if not fd then
-			return
-		end
-
-		while true do
-			local name, file_type = vim.loop.fs_scandir_next(fd)
-			if not name then
-				break
-			end
-
-			if file_type == "directory" then
-				scan_dir(dir .. "/" .. name, prefix)
-			elseif file_type == "file" and name:match("%.py$") and name ~= "__init__.py" then
-				local command_name = prefix .. name:gsub("%.py$", "")
-				table.insert(results, command_name)
-			end
-		end
-	end
-
-	local project_root = config.django_root or config.project_root
-	if not project_root then
-		return results
-	end
-
-	local fd = vim.loop.fs_scandir(project_root)
-	if not fd then
-		return results
-	end
-
-	while true do
-		local app_name, app_type = vim.loop.fs_scandir_next(fd)
-		if not app_name then
-			break
-		end
-
-		if app_type == "directory" then
-			local commands_path = project_root .. "/" .. app_name .. "/management/commands"
-			local stat = vim.loop.fs_stat(commands_path)
-			if stat and stat.type == "directory" then
-				scan_dir(commands_path, app_name .. ".")
-			else
-			end
-		end
-	end
-
-	return results
-end
-
 -- Public API functions
 function M.DjangoRun()
-	run_django_terminal("runserver")
+	commands.run_django_terminal("runserver")
 end
 
 function M.DjangoMigrate()
-	run_django_terminal("migrate")
+	commands.run_django_terminal("migrate")
 end
 
 function M.DjangoMakemigrations()
-	run_django_terminal("makemigrations")
+	commands.run_django_terminal("makemigrations")
 end
 
 function M.DjangoShell()
-	run_django_terminal("shell")
+	commands.run_django_terminal("shell")
 end
 
 function M.DjangoInit()
-	local django_root = find_django_root()
+	local django_root = utils.find_django_root()
 
 	if not django_root then
 		print("Error: Django project not found. Please navigate to a Django project directory first.")
 		return
 	end
 
-	local venv_path = find_venv()
+	local venv_path = utils.find_venv()
 
 	-- preguntar settings normales si no existen
-	if not config.django_settings then
+	if not config.config.django_settings then
 		local input_settings = vim.fn.input("Django settings module (e.g. mysite.settings): ")
 		if input_settings ~= "" then
-			config.django_settings = input_settings
+			config.config.django_settings = input_settings
 		else
-			config.django_settings = "mysite.settings"
+			config.config.django_settings = "mysite.settings"
 		end
 	end
 
 	-- preguntar settings de test si no existen
-	if not config.django_test_settings then
+	if not config.config.django_test_settings then
 		local input_test_settings = vim.fn.input("Django test settings module (e.g. mysite.test_settings): ")
 		if input_test_settings ~= "" then
-			config.django_test_settings = input_test_settings
+			config.config.django_test_settings = input_test_settings
 		else
-			config.django_test_settings = config.django_settings -- fallback
+			config.config.django_test_settings = config.config.django_settings -- fallback
 		end
 	end
 
-	config.django_root = django_root
-	config.project_root = vim.fn.getcwd()
-	config.venv_path = venv_path
+	config.config.django_root = django_root
+	config.config.project_root = vim.fn.getcwd()
+	config.config.venv_path = venv_path
 
-	save_config()
+	config.save_config()
 
 	print("Djortcuts initialized!")
 	print("Django root: " .. django_root)
-	print("Project root: " .. config.project_root)
-	print("Django settings: " .. config.django_settings)
-	print("Django test settings: " .. config.django_test_settings)
+	print("Project root: " .. config.config.project_root)
+	print("Django settings: " .. config.config.django_settings)
+	print("Django test settings: " .. config.config.django_test_settings)
 	if venv_path then
 		print("Virtual environment: " .. venv_path)
 	else
@@ -300,62 +72,64 @@ function M.DjangoInit()
 end
 
 function M.DjangoTest()
-	run_django_terminal("test", { test = true })
+	commands.run_django_terminal("test", { test = true })
 end
 
 function M.DjangoCollectstatic()
-	run_django_terminal("collectstatic --noinput")
+	commands.run_django_terminal("collectstatic --noinput")
 end
 
 function M.DjangoCreateSuperuser()
-	run_django_terminal("createsuperuser")
+	commands.run_django_terminal("createsuperuser")
 end
 
 function M.DjangoCheck()
-	run_django_terminal("check")
+	commands.run_django_terminal("check")
 end
 
 function M.DjangoFlush()
-	run_django_terminal("flush")
+	commands.run_django_terminal("flush")
 end
 
 function M.DjangoLoaddata()
-	run_django_terminal("loaddata")
+	commands.run_django_terminal("loaddata")
 end
 
 function M.DjangoDumpdata()
-	run_django_terminal("dumpdata")
+	commands.run_django_terminal("dumpdata")
 end
 
 function M.DjangoShowmigrations()
-	run_django_terminal("showmigrations")
+	commands.run_django_terminal("showmigrations")
 end
 
 function M.DjangoSquashmigrations()
-	run_django_terminal("squashmigrations")
+	commands.run_django_terminal("squashmigrations")
 end
 
 function M.DjangoStartapp()
 	local app_name = vim.fn.input("App name: ")
 	if app_name and app_name ~= "" then
-		run_django_terminal("startapp " .. app_name)
+		commands.run_django_terminal("startapp " .. app_name)
 	end
 end
 
 function M.DjangoStartproject()
 	local project_name = vim.fn.input("Project name: ")
 	if project_name and project_name ~= "" then
-		run_django_terminal("startproject " .. project_name)
+		commands.run_django_terminal("startproject " .. project_name)
 	end
 end
 
+-- 🚀 Función principal mejorada para DjangoManagementCommand
 function M.DjangoManagementCommand()
-	local available_commands = get_all_management_commands()
+	local available_commands = utils.get_all_management_commands()
 	if not available_commands or #available_commands == 0 then
 		print("Error: No se encontraron management commands")
 		return
 	end
 
+	-- Seleccionar comando principal
 	vim.ui.select(available_commands, { prompt = "Seleccioná un management command:" }, function(choice)
 		if not choice then
 			return
@@ -367,48 +141,119 @@ function M.DjangoManagementCommand()
 			choice = parts[#parts]
 		end
 
-		-- Telescope picker en el centro para argumentos
-		pickers
-			.new({}, {
-				prompt_title = "Args (Enter para vacío)",
-				finder = finders.new_table({ results = { "" } }),
-				sorter = conf.generic_sorter({}),
-				layout_strategy = "center",
-				layout_config = { width = 0.5, height = 3 },
-				attach_mappings = function(prompt_bufnr)
-					actions.select_default:replace(function()
-						local args = action_state.get_current_line()
-						actions.close(prompt_bufnr)
-						local cmd = choice
-						if args ~= "" then
-							cmd = cmd .. " " .. args
+		-- Analizar argumentos del comando
+		local parsed_args = management.parse_command_help(choice)
+
+		if #parsed_args.errors > 0 then
+			for _, error in ipairs(parsed_args.errors) do
+				print("Error: " .. error)
+			end
+			return
+		end
+
+		-- Estado del picker
+		local selected_args = {}
+		local available_flags = parsed_args.flags
+		local available_positional = parsed_args.positional
+
+		-- Función para manejar selección de argumento
+		local function handle_arg_selection(entry)
+			if entry.type == "flag" then
+				if entry.flag_type == "with_value" then
+					-- Flag con valor: pedir el valor al usuario
+					local value = vim.fn.input(string.format("Valor para %s: ", entry.value))
+					if value and value ~= "" then
+						table.insert(selected_args, entry.value .. " " .. value)
+						-- Marcar como usado
+						for _, flag in ipairs(available_flags) do
+							if flag.flag == entry.value then
+								flag.used = true
+								break
+							end
 						end
-						run_django_terminal(cmd)
-					end)
-					return true
-				end,
-			})
-			:find()
+					end
+				else
+					-- Flag sin valor: agregar directamente
+					table.insert(selected_args, entry.value)
+					-- Marcar como usado
+					for _, flag in ipairs(available_flags) do
+						if flag.flag == entry.value then
+							flag.used = true
+							break
+						end
+					end
+				end
+			elseif entry.type == "positional" then
+				-- Argumento posicional: agregar directamente
+				table.insert(selected_args, entry.value)
+				-- Marcar como usado
+				for _, pos_arg in ipairs(available_positional) do
+					if pos_arg.name == entry.value then
+						pos_arg.used = true
+						break
+					end
+				end
+			elseif entry.type == "dynamic_positional" then
+				-- Argumento posicional dinámico: agregar el valor
+				table.insert(selected_args, entry.value)
+			end
+
+			-- Recrear el picker con argumentos actualizados
+			local new_picker = pickers.create_args_picker(
+				choice,
+				{ flags = available_flags, positional = available_positional },
+				selected_args,
+				handle_arg_selection,
+				function()
+					-- Función de confirmación
+					local final_cmd = choice
+					if #selected_args > 0 then
+						final_cmd = final_cmd .. " " .. table.concat(selected_args, " ")
+					end
+					commands.run_django_terminal(final_cmd)
+				end
+			)
+			new_picker:find()
+		end
+
+		-- Función de confirmación
+		local function confirm_execution()
+			local final_cmd = choice
+			if #selected_args > 0 then
+				final_cmd = final_cmd .. " " .. table.concat(selected_args, " ")
+			end
+			commands.run_django_terminal(final_cmd)
+		end
+
+		-- Crear y mostrar el picker inicial
+		local picker = pickers.create_args_picker(
+			choice,
+			parsed_args,
+			selected_args,
+			handle_arg_selection,
+			confirm_execution
+		)
+		picker:find()
 	end)
 end
 
 -- Setup function
 function M.setup(user_config)
-	config = vim.tbl_deep_extend("force", default_config, user_config or {})
+	config.setup(user_config)
 
-	if config.auto_detect then
-		load_config()
+	if config.config.auto_detect then
+		config.load_config()
 
-		if not config.django_root then
-			config.django_root = find_django_root()
+		if not config.config.django_root then
+			config.config.django_root = utils.find_django_root()
 		end
 
-		if not config.project_root then
-			config.project_root = vim.fn.getcwd()
+		if not config.config.project_root then
+			config.config.project_root = vim.fn.getcwd()
 		end
 
-		if not config.venv_path then
-			config.venv_path = find_venv()
+		if not config.config.venv_path then
+			config.config.venv_path = utils.find_venv()
 		end
 	end
 
