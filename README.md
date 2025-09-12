@@ -49,6 +49,7 @@ return {
       { "<leader>jt", "<cmd>DjangoTest<cr>", desc = "Django Test" },
       { "<leader>jc", "<cmd>DjangoCollectstatic<cr>", desc = "Django Collect Static" },
       { "<leader>jk", "<cmd>DjangoCheck<cr>", desc = "Django Check" },
+      { "<leader>jC", "<cmd>DjangoManagementCommand<cr>", desc = "Django Management Command" },
     },
     dependencies = {
       "folke/which-key.nvim",
