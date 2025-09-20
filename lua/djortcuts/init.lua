@@ -83,6 +83,26 @@ function M.DjangoCreateSuperuser()
 	commands.run_django_terminal("createsuperuser")
 end
 
+-- i18n: makemessages
+function M.DjangoMakemessages()
+	local opts = vim.fn.input("makemessages options (e.g. -l es, -a): ")
+	local cmd = "makemessages"
+	if opts and opts ~= "" then
+		cmd = cmd .. " " .. opts
+	end
+	commands.run_django_terminal(cmd)
+end
+
+-- i18n: compilemessages (aka build messages)
+function M.DjangoCompilemessages()
+	local opts = vim.fn.input("compilemessages options (optional, e.g. -l es): ")
+	local cmd = "compilemessages"
+	if opts and opts ~= "" then
+		cmd = cmd .. " " .. opts
+	end
+	commands.run_django_terminal(cmd)
+end
+
 function M.DjangoCheck()
 	commands.run_django_terminal("check")
 end
@@ -226,13 +246,8 @@ function M.DjangoManagementCommand()
 		end
 
 		-- Crear y mostrar el picker inicial
-		local picker = pickers.create_args_picker(
-			choice,
-			parsed_args,
-			selected_args,
-			handle_arg_selection,
-			confirm_execution
-		)
+		local picker =
+			pickers.create_args_picker(choice, parsed_args, selected_args, handle_arg_selection, confirm_execution)
 		picker:find()
 	end)
 end
@@ -277,6 +292,12 @@ function M.setup(user_config)
 		"DjangoShowmigrations",
 		M.DjangoShowmigrations,
 		{ desc = "Show Django migrations" }
+	)
+	vim.api.nvim_create_user_command("DjangoMakemessages", M.DjangoMakemessages, { desc = "Create/Update .po files" })
+	vim.api.nvim_create_user_command(
+		"DjangoCompilemessages",
+		M.DjangoCompilemessages,
+		{ desc = "Compile .po to .mo (build messages)" }
 	)
 	vim.api.nvim_create_user_command(
 		"DjangoSquashmigrations",
