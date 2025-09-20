@@ -22,8 +22,19 @@ function M.run_django_terminal(command, opts)
 		return
 	end
 
-	-- Usar settings normales o de test según `opts`
-	local settings_module = opts.test and config.config.django_test_settings or config.config.django_settings
+	-- Usar settings de test si se solicita explícitamente o si el comando es 'test'
+	local is_test_command = false
+	if opts.test then
+		is_test_command = true
+	else
+		local first_word = command:match("^%s*(%S+)")
+		if first_word == "test" then
+			is_test_command = true
+		end
+	end
+
+	-- Usar settings normales o de test según el tipo de comando
+	local settings_module = is_test_command and config.config.django_test_settings or config.config.django_settings
 	local settings_arg = settings_module and (" --settings=" .. settings_module) or ""
 
 	-- Build the full command
