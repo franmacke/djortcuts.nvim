@@ -2,22 +2,83 @@ local config = require("djortcuts.config")
 
 local M = {}
 
-function M.find_django_root()
-	local current_dir = vim.fn.getcwd()
-	print("Current directory: " .. current_dir)
+local cached_django_root = nil
 
-	local subdirs = vim.fn.glob(current_dir .. "/*/", false, true)
+local function search_manage_py(dir)
+	local manage_py_path = dir .. "/manage.py"
+	if vim.fn.filereadable(manage_py_path) == 1 then
+		return dir
+	end
+	return nil
+end
+
+local function walk_up(current_dir, max_levels)
+	local dir = current_dir
+	local levels = 0
+	while dir and dir ~= "/" and dir ~= "" and levels < max_levels do
+		local result = search_manage_py(dir)
+		if result then
+			return result
+		end
+		dir = vim.fn.fnamemodify(dir, ":h")
+		levels = levels + 1
+	end
+	return nil
+end
+
+local function search_recursive(base_dir, depth, current_depth)
+	if current_depth > depth then
+		return nil
+	end
+
+	local result = search_manage_py(base_dir)
+	if result then
+		return result
+	end
+
+	local subdirs = vim.fn.glob(base_dir .. "/*/", false, true)
 	for _, subdir in ipairs(subdirs) do
 		subdir = subdir:gsub("/$", "")
-		local subdir_manage_py = subdir .. "/manage.py"
-		if vim.fn.filereadable(subdir_manage_py) == 1 then
-			print("Found Django project in: " .. subdir)
-			return subdir
+		result = search_recursive(subdir, depth, current_depth + 1)
+		if result then
+			return result
 		end
 	end
 
-	print("No Django project found in subdirectories")
 	return nil
+end
+
+function M.find_django_root()
+	if cached_django_root then
+		return cached_django_root
+	end
+
+	local current_dir = vim.fn.getcwd()
+	local depth = config.config.detection_depth or 3
+
+	local result = search_manage_py(current_dir)
+	if result then
+		cached_django_root = result
+		return result
+	end
+
+	result = walk_up(current_dir, depth)
+	if result then
+		cached_django_root = result
+		return result
+	end
+
+	result = search_recursive(current_dir, depth, 0)
+	if result then
+		cached_django_root = result
+		return result
+	end
+
+	return nil
+end
+
+function M.clear_cache()
+	cached_django_root = nil
 end
 
 function M.find_venv()

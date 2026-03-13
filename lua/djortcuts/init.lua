@@ -3,6 +3,8 @@ local utils = require("djortcuts.utils")
 local commands = require("djortcuts.commands")
 local management = require("djortcuts.management")
 local pickers = require("djortcuts.pickers")
+local logs = require("djortcuts.logs")
+local floating = require("djortcuts.floating")
 
 local M = {}
 
@@ -83,6 +85,26 @@ function M.DjangoCreateSuperuser()
 	commands.run_django_terminal("createsuperuser")
 end
 
+-- i18n: makemessages
+function M.DjangoMakemessages()
+	local opts = vim.fn.input("makemessages options (e.g. -l es, -a): ")
+	local cmd = "makemessages"
+	if opts and opts ~= "" then
+		cmd = cmd .. " " .. opts
+	end
+	commands.run_django_terminal(cmd)
+end
+
+-- i18n: compilemessages (aka build messages)
+function M.DjangoCompilemessages()
+	local opts = vim.fn.input("compilemessages options (optional, e.g. -l es): ")
+	local cmd = "compilemessages"
+	if opts and opts ~= "" then
+		cmd = cmd .. " " .. opts
+	end
+	commands.run_django_terminal(cmd)
+end
+
 function M.DjangoCheck()
 	commands.run_django_terminal("check")
 end
@@ -119,6 +141,43 @@ function M.DjangoStartproject()
 	if project_name and project_name ~= "" then
 		commands.run_django_terminal("startproject " .. project_name)
 	end
+end
+
+function M.DjortcutsLogs(args)
+	local log_list = logs.list()
+
+	if not log_list or #log_list == 0 then
+		print("No command logs found.")
+		return
+	end
+
+	if args and args.args and args.args ~= "" then
+		local id = tonumber(args.args)
+		if id then
+			local log_entry = logs.get(id)
+			if log_entry then
+				floating.open(log_entry.output)
+				return
+			else
+				print("Log not found for ID: " .. id)
+				return
+			end
+		end
+	end
+
+	vim.ui.select(log_list, {
+		prompt = "Select a command log:",
+		format_item = function(item)
+			return string.format("[%d] %s - %s", item.id, item.timestamp, item.command)
+		end,
+	}, function(choice)
+		if choice then
+			local log_entry = logs.get(choice.id)
+			if log_entry then
+				floating.open(log_entry.output)
+			end
+		end
+	end)
 end
 
 -- 🚀 Función principal mejorada para DjangoManagementCommand
@@ -226,13 +285,8 @@ function M.DjangoManagementCommand()
 		end
 
 		-- Crear y mostrar el picker inicial
-		local picker = pickers.create_args_picker(
-			choice,
-			parsed_args,
-			selected_args,
-			handle_arg_selection,
-			confirm_execution
-		)
+		local picker =
+			pickers.create_args_picker(choice, parsed_args, selected_args, handle_arg_selection, confirm_execution)
 		picker:find()
 	end)
 end
@@ -278,6 +332,12 @@ function M.setup(user_config)
 		M.DjangoShowmigrations,
 		{ desc = "Show Django migrations" }
 	)
+	vim.api.nvim_create_user_command("DjangoMakemessages", M.DjangoMakemessages, { desc = "Create/Update .po files" })
+	vim.api.nvim_create_user_command(
+		"DjangoCompilemessages",
+		M.DjangoCompilemessages,
+		{ desc = "Compile .po to .mo (build messages)" }
+	)
 	vim.api.nvim_create_user_command(
 		"DjangoSquashmigrations",
 		M.DjangoSquashmigrations,
@@ -290,6 +350,10 @@ function M.setup(user_config)
 		M.DjangoManagementCommand,
 		{ desc = "Run Management Command" }
 	)
+	vim.api.nvim_create_user_command("DjortcutsLogs", M.DjortcutsLogs, {
+		desc = "List and view command logs",
+		nargs = "?",
+	})
 end
 
 return M
