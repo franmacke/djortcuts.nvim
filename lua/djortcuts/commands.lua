@@ -1,16 +1,20 @@
 local config = require("djortcuts.config")
 local utils = require("djortcuts.utils")
+local logs = require("djortcuts.logs")
+local floating = require("djortcuts.floating")
 
 local M = {}
+
+local current_output = {}
+local job_start_time = nil
+local current_command = nil
 
 function M.run_django_terminal(command, opts)
 	opts = opts or {}
 	local django_root = config.config.django_root or utils.find_django_root()
 
 	if not django_root then
-		print(
-			"Error: Django project not found. Please run :DjangoInit first or navigate to a Django project directory."
-		)
+		vim.notify("Error: Django project not found. Please run :DjangoInit first or navigate to a Django project directory.", vim.log.levels.ERROR)
 		return
 	end
 
@@ -18,11 +22,10 @@ function M.run_django_terminal(command, opts)
 	local manage_py = django_root .. "/manage.py"
 
 	if vim.fn.filereadable(manage_py) ~= 1 then
-		print("Error: manage.py not found in " .. django_root)
+		vim.notify("Error: manage.py not found in " .. django_root, vim.log.levels.ERROR)
 		return
 	end
 
-	-- Usar settings de test si se solicita explícitamente o si el comando es 'test'
 	local is_test_command = false
 	if opts.test then
 		is_test_command = true
@@ -33,11 +36,9 @@ function M.run_django_terminal(command, opts)
 		end
 	end
 
-	-- Usar settings normales o de test según el tipo de comando
 	local settings_module = is_test_command and config.config.django_test_settings or config.config.django_settings
 	local settings_arg = settings_module and (" --settings=" .. settings_module) or ""
 
-	-- Build the full command
 	local full_command
 	if config.config.venv_path then
 		local venv_activate = config.config.venv_path .. "/bin/activate"
@@ -58,11 +59,55 @@ function M.run_django_terminal(command, opts)
 		full_command = "cd " .. django_root .. " && " .. python_exec .. " manage.py " .. command .. settings_arg
 	end
 
-	print("Running command: " .. full_command)
+	current_output = {}
+	job_start_time = vim.fn.reltime()
+	current_command = full_command
 
-	vim.cmd(config.config.terminal_cmd)
-	vim.cmd("terminal " .. full_command)
-	vim.cmd("stopinsert")
+	vim.notify("Running: " .. command, vim.log.levels.INFO)
+
+	floating.open({ "Starting: " .. command .. "..." })
+
+	local job_id = vim.fn.jobstart(full_command, {
+		on_stdout = function(_, data)
+			for _, line in ipairs(data) do
+				if line and line ~= "" then
+					table.insert(current_output, line)
+					floating.update({ line })
+				end
+			end
+		end,
+		on_stderr = function(_, data)
+			for _, line in ipairs(data) do
+				if line and line ~= "" then
+					table.insert(current_output, "[stderr] " .. line)
+					floating.update({ "[stderr] " .. line })
+				end
+			end
+		end,
+		on_exit = function(_, exit_code)
+			local duration_ms = vim.fn.reltimefloat(vim.fn.reltime(job_start_time)) * 1000
+			local exit_msg = exit_code == 0 and "completed successfully" or "failed with exit code " .. exit_code
+
+			logs.add({
+				command = current_command,
+				output = current_output,
+				exit_code = exit_code,
+				duration_ms = duration_ms,
+			})
+
+			local log_level = exit_code == 0 and vim.log.levels.INFO or vim.log.levels.ERROR
+			vim.notify(command .. " " .. exit_msg .. " (" .. string.format("%.0f", duration_ms) .. "ms)", log_level)
+
+			current_output = {}
+			job_start_time = nil
+			current_command = nil
+		end,
+	})
+
+	if job_id <= 0 then
+		vim.notify("Error: Failed to start job", vim.log.levels.ERROR)
+		floating.close()
+	end
 end
 
 return M

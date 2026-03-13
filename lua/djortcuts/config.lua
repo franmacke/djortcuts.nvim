@@ -20,6 +20,10 @@ M.default_config = {
 	config_file = ".djortcuts.json",
 	-- Auto-detect Django project
 	auto_detect = true,
+	-- Max directory depth for recursive Django project detection
+	detection_depth = 3,
+	-- Max command logs to retain in memory
+	max_log_entries = 50,
 }
 
 -- Configuration
