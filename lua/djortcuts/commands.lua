@@ -2,6 +2,7 @@ local config = require("djortcuts.config")
 local utils = require("djortcuts.utils")
 local logs = require("djortcuts.logs")
 local floating = require("djortcuts.floating")
+local overseer = require("djortcuts.overseer")
 
 local M = {}
 
@@ -18,6 +19,55 @@ function M.run_django_terminal(command, opts)
 		return
 	end
 
+	local use_overseer = config.config.use_overseer ~= false
+	local overseer_available = overseer.is_available()
+
+	if use_overseer and overseer_available then
+		M.run_with_overseer(command, opts, django_root)
+	else
+		if use_overseer and not overseer_available then
+			vim.notify("Using legacy execution: overseer not available", vim.log.levels.WARN)
+		end
+		M.run_with_jobstart(command, opts, django_root)
+	end
+end
+
+function M.run_with_overseer(command, opts, django_root)
+	local job_start_time = vim.fn.reltime()
+	local current_output = {}
+
+	vim.notify("Running: " .. command, vim.log.levels.INFO)
+
+	local on_complete = function(task)
+		local exit_code = task.code or 0
+		local duration_ms = vim.fn.reltimefloat(vim.fn.reltime(job_start_time)) * 1000
+
+		local full_command = "django manage.py " .. command
+
+		logs.add({
+			command = full_command,
+			output = current_output,
+			exit_code = exit_code,
+			duration_ms = duration_ms,
+		})
+
+		local exit_msg = exit_code == 0 and "completed successfully" or "failed with exit code " .. exit_code
+		local log_level = exit_code == 0 and vim.log.levels.INFO or vim.log.levels.ERROR
+		vim.notify(command .. " " .. exit_msg .. " (" .. string.format("%.0f", duration_ms) .. "ms)", log_level)
+	end
+
+	overseer.run_command(command, {
+		test = opts.test,
+		on_output = function(line)
+			if line and line ~= "" then
+				table.insert(current_output, line)
+			end
+		end,
+		on_complete = on_complete,
+	})
+end
+
+function M.run_with_jobstart(command, opts, django_root)
 	local python_exec = utils.get_python_executable()
 	local manage_py = django_root .. "/manage.py"
 

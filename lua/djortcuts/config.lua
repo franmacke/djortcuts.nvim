@@ -24,6 +24,10 @@ M.default_config = {
 	detection_depth = 3,
 	-- Max command logs to retain in memory
 	max_log_entries = 50,
+	-- Use overseer.nvim for task execution (if available)
+	use_overseer = true,
+	-- Open overseer in fullscreen mode (90% height, 100% width)
+	overseer_fullscreen = true,
 }
 
 -- Configuration
@@ -46,6 +50,7 @@ function M.load_config()
 				M.config.python_executable = json_config.python_executable or M.config.python_executable
 				M.config.django_settings = json_config.django_settings or M.config.django_settings
 				M.config.django_test_settings = json_config.django_test_settings or M.config.django_test_settings
+				M.config.use_overseer = json_config.use_overseer ~= nil and json_config.use_overseer or M.config.use_overseer
 			end
 		end
 	end
@@ -60,6 +65,7 @@ function M.save_config()
 		python_executable = M.config.python_executable,
 		django_settings = M.config.django_settings,
 		django_test_settings = M.config.django_test_settings,
+		use_overseer = M.config.use_overseer,
 	}
 
 	local file = io.open(config_path, "w")

@@ -5,6 +5,7 @@ local management = require("djortcuts.management")
 local pickers = require("djortcuts.pickers")
 local logs = require("djortcuts.logs")
 local floating = require("djortcuts.floating")
+local overseer = require("djortcuts.overseer")
 
 local M = {}
 
@@ -311,6 +312,10 @@ function M.setup(user_config)
 		end
 	end
 
+	if config.config.use_overseer ~= false and overseer.is_available() then
+		overseer.setup({ fullscreen = config.config.overseer_fullscreen })
+	end
+
 	vim.api.nvim_create_user_command("DjangoRun", M.DjangoRun, { desc = "Run Django development server" })
 	vim.api.nvim_create_user_command("DjangoMigrate", M.DjangoMigrate, { desc = "Run Django migrations" })
 	vim.api.nvim_create_user_command("DjangoMakemigrations", M.DjangoMakemigrations, { desc = "Create migrations" })
@@ -354,6 +359,9 @@ function M.setup(user_config)
 		desc = "List and view command logs",
 		nargs = "?",
 	})
+	vim.api.nvim_create_user_command("DjangoOverseerToggle", function()
+		overseer.toggle_overseer_fullscreen()
+	end, { desc = "Toggle overseer task list" })
 end
 
 return M

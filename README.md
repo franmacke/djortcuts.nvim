@@ -40,7 +40,11 @@ return {
     priority = 1000,
     config = function()
       local django_automation = require("djortcuts")
-      django_automation.setup()
+      django_automation.setup({
+        -- Use overseer.nvim for task execution (default: true)
+        -- Requires overseer.nvim to be installed
+        use_overseer = true,
+      })
     end,
     keys = {
       { "<leader>jr", "<cmd>DjangoRun<cr>", desc = "Django Run Server" },
